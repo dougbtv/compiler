@@ -222,7 +222,7 @@ def shunting_yard(tokens):
     if len(oq) == 1:
         return oq[0]
     else:
-        return [ 'multi' ] + oq
+        raise Exception("Wrong number of items left on stack")
 
 def parse_line(ln):
     tokens = tokenize(ln.strip())
@@ -238,14 +238,4 @@ def parse_line(ln):
         return shunting_yard(tokens)
     else:
         eqplace = tokens.index('=')
-        pre = 0
-        i = 0
-        while i < eqplace:
-            try: nextcomma = i + tokens[i:].index(',')
-            except: nextcomma = eqplace
-            pre += 1
-            i = nextcomma+1
-        if pre == 1:
-            return [ 'set', shunting_yard(tokens[:eqplace]), shunting_yard(tokens[eqplace+1:]) ]
-        else:
-            return [ 'mset', shunting_yard(tokens[:eqplace]), shunting_yard(tokens[eqplace+1:]) ]
+        return [ 'set', shunting_yard(tokens[:eqplace]), shunting_yard(tokens[eqplace+1:]) ]

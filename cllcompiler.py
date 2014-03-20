@@ -15,30 +15,34 @@ optable = {
     '<=': 'LE',
     '>=': 'GE',
     '<': 'LT',
-    '>': 'GT'
+    '>': 'GT',
+    'and': 'AND',
+    'or': 'OR',
+    'xor': 'XOR',
+    '&&': 'AND',
+    '||': 'OR'
 }
 
 funtable = {
-    'sha256': ['SHA256', 3],
     'sha3': ['SHA3', 3],
-    'ripemd160': ['RIPEMD160', 3],
-    'ecsign': ['ECSIGN', 2],
     'ecrecover': ['ECRECOVER', 4],
-    'ecvalid': ['ECVALID', 2],
-    'ecadd': ['ECADD', 4],
-    'ecmul': ['ECMUL', 3],
+    'byte': ['BYTE', 2],
 }
 
 pseudovars = {
-    'tx.datan': 'TXDATAN',
-    'tx.sender': 'TXSENDER',
-    'tx.value': 'TXVALUE',
+    'call.datasize': 'TXDATAN',
+    'call.sender': 'TXSENDER',
+    'call.value': 'CALLVALUE',
+    'call.gasprice': 'GASPRICE',
+    'balance': 'BALANCE',
+    'origin': 'ORIGIN',
+    'gas': 'GAS',
+    'block.prevhash': 'BLK_PREVHASH',
+    'block.coinbase': 'BLK_COINBASE',
     'block.timestamp': 'BLK_TIMESTAMP',
     'block.number': 'BLK_NUMBER',
-    'block.basefee': 'BASEFEE',
     'block.difficulty': 'BLK_DIFFICULTY',
-    'block.coinbase': 'BLK_COINBASE',
-    'block.parenthash': 'BLK_PREVHASH'
+    'block.gaslimit': 'GASLIMIT',
 }
 
 pseudoarrays = {
@@ -122,8 +126,6 @@ def compile_expr(expr,varhash):
         return compile_expr(['!', [ '*', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
     elif expr[0] in ['and', '&&']: 
         return compile_expr(['!', [ '+', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
-    elif expr[0] == 'multi':
-        return sum([compile_expr(e,varhash) for e in expr[1:]],[])
     elif expr == 'tx.datan':
         return ['DATAN']
     else:
@@ -151,14 +153,6 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         rexp = compile_expr(stmt[2],varhash)
         lt = get_left_expr_type(stmt[1])
         return rexp + lexp + ['SSTORE' if lt == 'storage' else 'MSTORE']
-    elif stmt[0] == 'mset':
-        rexp = compile_expr(stmt[2],varhash)
-        exprstates = [get_left_expr_type(e) for e in stmt[1][1:]]
-        o = rexp
-        for e in stmt[1][1:]:
-            o += compile_left_expr(e,varhash)
-            o += [ 'SSTORE' if get_left_expr_type(e) == 'storage' else 'MSTORE' ]
-        return o
     elif stmt[0] == 'seq':
         o = []
         for s in stmt[1:]:
