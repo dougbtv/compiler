@@ -175,7 +175,6 @@ def compile_stmt(stmt,varhash={},lc=[0]):
     elif stmt[0] == 'fun' and stmt[1] == 'suicide':
         return compile_expr(stmt[2]) + [ 'SUICIDE' ]
         
-
 # Dereference labels
 def assemble(c):
     iq = [x for x in c]

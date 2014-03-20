@@ -6,6 +6,9 @@ def spaces(ln):
     while spaces < len(ln) and ln[spaces] == ' ': spaces += 1
     return spaces
 
+def parse(document):
+    return parse_lines(document.split('\n'))
+
 # Parse the statement-level structure, including if and while statements
 def parse_lines(lns):
     o = []
@@ -64,6 +67,8 @@ def chartype(c):
         return 'alphanum'
     elif c in '\t ': return 'space'
     elif c in '()[]': return 'brack'
+    elif c == '"': return 'dquote'
+    elif c == "'": return 'squote'
     else: return 'symb'
 
 def tokenize(ln):
@@ -72,6 +77,9 @@ def tokenize(ln):
     o = []
     global cur
     cur = ''
+    # Quotes
+    if '//' in ln: ln = ln[:ln.find('//')]
+    # Finish a token and start a new one
     def nxt():
         global cur
         if len(cur) >= 2 and cur[-1] == '-':
@@ -79,18 +87,42 @@ def tokenize(ln):
         elif len(cur.strip()) >= 1:
             o.append(cur)
         cur = ''
+    # Main loop
     while i < len(ln):
         c = chartype(ln[i])
-        if c == 'brack' or tp == 'brack': nxt()
-        elif c == 'space': nxt()
-        elif c != 'space' and tp == 'space': nxt()
-        elif c == 'symb' and tp != 'symb': nxt()
-        elif c == 'alphanum' and tp == 'symb': nxt()
-        cur += ln[i]
-        tp = c
-        i += 1
+        # Inside a string
+        if tp == 'squote' or tp == "dquote":
+            if c == tp:
+                cur += ln[i]
+                nxt()
+                i += 1
+                tp = 'space'
+            elif ln[i:i+2] == '\\x':
+                cur += ln[i+2:i+4].decode('hex')
+                i += 4
+            elif ln[i:i+2] == '\\n':
+                cur += '\x0a'
+                i += 2
+            elif ln[i] == '\\':
+                cur += ln[i+1]
+                i += 2
+            else:
+                cur += ln[i]
+                i += 1
+        # Not inside a string
+        else:
+            if c == 'brack' or tp == 'brack': nxt()
+            elif c == 'space': nxt()
+            elif c != 'space' and tp == 'space': nxt()
+            elif c == 'symb' and tp != 'symb': nxt()
+            elif c == 'alphanum' and tp == 'symb': nxt()
+            elif c == 'squote' or c == "dquote": nxt()
+            cur += ln[i]
+            tp = c
+            i += 1
     nxt()
     if o[-1] in [':',':\n','\n']: o.pop()
+    if tp in ['squote','dquote']: raise Exception("Unclosed string: "+ln)
     return o
 
 # This is the part where we turn a token list into an abstract syntax tree
