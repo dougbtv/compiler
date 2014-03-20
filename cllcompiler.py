@@ -197,10 +197,9 @@ def assemble(c):
     return oq
 
 def compile(source):
-    lines = source.split('\n')
-    p = parse_lines(lines)
+    if isinstance(source,('str','unicode')): source = parse(source)
     #print p
-    return assemble(compile_stmt(p))
+    return assemble(compile_stmt(source))
 
 if len(sys.argv) >= 2:
     if os.path.exists(sys.argv[1]):
