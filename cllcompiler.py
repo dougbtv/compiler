@@ -96,7 +96,7 @@ def compile_expr(expr,varhash):
             raise Exception("Wrong number of arguments: "+str(expr)) 
         f = compile_expr(expr[1],varhash)
         g = compile_expr(expr[2],varhash)
-        return f + g + [optable[expr[0]]]
+        return g + f + [optable[expr[0]]]
     elif expr[0] == 'fun' and expr[1] in funtable:
         if len(expr) != funtable[expr[1]][1] + 2:
             raise Exception("Wrong number of arguments: "+str(expr)) 
