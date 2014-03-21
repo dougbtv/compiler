@@ -33,8 +33,8 @@ funtable = {
 }
 
 pseudovars = {
-    'call.datasize': 'TXDATAN',
-    'call.sender': 'TXSENDER',
+    'call.datasize': 'CALLDATAN',
+    'call.sender': 'CALLER',
     'call.value': 'CALLVALUE',
     'call.gasprice': 'GASPRICE',
     'call.origin': 'ORIGIN',
@@ -49,7 +49,6 @@ pseudovars = {
 }
 
 pseudoarrays = {
-    'tx.data': 'TXDATA',
     'contract.storage': 'SLOAD',
     'block.address_balance': 'BALANCE',
 }
@@ -88,6 +87,8 @@ def compile_left_expr(expr,varhash):
             raise Exception("Can't set the value of a number! "+expr)
         elif expr in varhash:
             return ['PUSH',varhash[expr]]
+        elif expr == 'call.data':
+            return ['PUSH','_CALLDATALOC','MLOAD']
         else:
             varhash[expr] = len(varhash) * 32
             return ['PUSH',varhash[expr]]
@@ -112,8 +113,8 @@ def compile_expr(expr,varhash):
             return ['PUSH',varhash[expr],'MLOAD']
         elif expr in pseudovars:
             return [pseudovars[expr]]
-        elif expr == 'tx.data':
-            return ['PUSH','_TXDATALOC','MLOAD']
+        elif expr == 'call.data':
+            return ['PUSH','_CALLDATALOC','MLOAD']
         else:
             varhash[expr] = len(varhash) * 32
             return ['PUSH',varhash[expr],'MLOAD']
@@ -138,10 +139,16 @@ def compile_expr(expr,varhash):
     elif expr[0] == 'access':
         if expr[1] in pseudoarrays:
             return compile_expr(expr[2],varhash) + [pseudoarrays[expr[1]]]
-        elif len(expr) == 3:
-            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','ADD','MLOAD']
-        elif len(expr) == 4 and expr[3] == ':':
-            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','ADD']
+        elif len(expr) == 3 or (len(expr) == 4 and expr[3] == ':'):
+            if is_numberlike(expr[2]):
+                middle = [numberize(expr[2])*32]
+            else:
+                middle = compile_expr(expr[2],varhash) + ['PUSH',32,'MUL']
+            if len(expr) == 3:
+                end = ['MLOAD']
+            else:
+                end = []
+            return compile_left_expr(expr[1],varhash) + middle + ['ADD'] + end
         else:
             raise Exception("Weird parameters for array access")
     elif expr[0] == '!':
@@ -160,15 +167,15 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         h = compile_stmt(stmt[3],varhash,lc) if len(stmt) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
-        if h: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ ref, 'JMP' ] + h + [ label ]
-        else: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
+        if h: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ ref, 'JUMP' ] + h + [ label ]
+        else: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ label ]
     elif stmt[0] == 'while':
         f = compile_expr(stmt[1],varhash)
         g = compile_stmt(stmt[2],varhash,lc)
         beglab, begref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         endlab, endref = 'LABEL_'+str(lc[0]+1), 'REF_'+str(lc[0]+1)
         lc[0] += 2
-        return [ beglab ] + f + [ 'NOT', endref, 'SWAP', 'JMPI' ] + g + [ begref, 'JMP', endlab ]
+        return [ beglab ] + f + [ 'NOT', endref, 'JUMPI' ] + g + [ begref, 'JUMP', endlab ]
     elif stmt[0] == 'set':
         lexp = compile_left_expr(stmt[1],varhash)
         rexp = compile_expr(stmt[2],varhash)
@@ -190,6 +197,7 @@ def compile_stmt(stmt,varhash={},lc=[0]):
             o += ['POP']
         return o
 
+# Experimental
 def get_vars(thing,h={}):
     if thing[0] in ['seq','if','while','set','access']:
         for t in thing[1:]: h = get_vars(t,h)
@@ -198,6 +206,14 @@ def get_vars(thing,h={}):
     elif isinstance(thing,(str,unicode)) and thing not in pseudovars and thing not in pseudoarrays:
         h[thing] = true
     return h
+
+# Stuff to add once to each program
+def add_wrappers(c,varcount=99):
+    if '_CALLDATALOC' in c:
+        prefix = ['PUSH',varcount*32,'DUP','CALLDATA']
+        c = prefix + [varcount*32 if x == '_CALLDATALOC' else x for x in c]
+    return c
+        
         
 # Dereference labels
 def assemble(c,varcount=99):
@@ -205,14 +221,10 @@ def assemble(c,varcount=99):
     mq = []
     pos = 0
     labelmap = {}
-    if '_TXDATALOC' in mq:   
-        mq = ['PUSH',varcount*32,'DUP','CALLDATA'] + mq
     while len(iq):
         front = iq.pop(0)
         if isinstance(front,str) and front[:6] == 'LABEL_':
             labelmap[front[6:]] = pos
-        elif front == '_TXDATALOC':
-            mq.apend(varcount*32)
         else:
             mq.append(front)
             pos += 2 if isinstance(front,str) and front[:4] == 'REF_' else 1
@@ -224,12 +236,14 @@ def assemble(c,varcount=99):
         else: oq.append(m)
     return oq
 
-def compile(source):
+def compile_to_aevm(source):
     if isinstance(source,(str,unicode)): source = parse(source)
     #print p
     varhash = {}
     c = compile_stmt(source,varhash)
-    return assemble(c,len(varhash))
+    return add_wrappers(c,len(varhash))
+
+def compile(source): return assemble(compile_to_aevm(source))
 
 if len(sys.argv) >= 2:
     if os.path.exists(sys.argv[1]):

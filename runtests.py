@@ -13,7 +13,10 @@ while 1:
     ast = cllcompiler.parse(text)
     print "AST:",ast
     print ""
-    code = cllcompiler.compile(ast)
+    aevm = cllcompiler.compile_to_aevm(ast)
+    print "AEVM:",' '.join([str(x) for x in aevm])
+    print ""
+    code = cllcompiler.assemble(aevm)
     print "Output:",' '.join([str(x) for x in code])
     if i >= len(t):
         break
