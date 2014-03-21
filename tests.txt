@@ -1,15 +1,15 @@
 ================
 x = 3 + 5
 ================
-x = array()
+x = array(3)
 x[0] = 4
 x[1] = 6
 x[2] = 8
 ================
-x = tx.datan
-y = tx.data[0]
-z = tx.sender
-mktx(z,10^18,0,0)
+x = call.datasize
+y = call.data[0]
+z = call.sender
+mkcall(z,10^18,0,0,0,0,0)
 ================
 if tx.value <= 25 * 10^18:
     stop
@@ -27,3 +27,10 @@ while i < 997:
     i = i + 1
 contract.storage[-1] = a
 ================
+if tx.data[0] == 0:
+    if tx.data[1] > 1000 and !contract.storage[tx.data[1]]:
+        contract.storage[tx.data[1]] = tx.data[2]
+else:
+    a = bytes(tx.data[2])
+    mkcall(contract.storage[tx.data[1]],tx.value,0,tx.data[3:],tx.datasize-96,a,tx.data[2])
+    return(a,tx.data[2])

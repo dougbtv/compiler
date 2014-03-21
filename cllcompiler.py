@@ -24,9 +24,13 @@ optable = {
 }
 
 funtable = {
-    'sha3': ['SHA3', 3],
-    'ecrecover': ['ECRECOVER', 4],
-    'byte': ['BYTE', 2],
+    'sha3': ['SHA3', 3, 1],
+    'ecrecover': ['ECRECOVER', 4, 1],
+    'byte': ['BYTE', 2, 1],
+    'mkcall': ['CALL', 7, 1],
+    'create': ['CREATE', 5, 1],
+    'return': ['RETURN', 2, 0],
+    'suicide': ['SUICIDE', 1, 0]
 }
 
 pseudovars = {
@@ -34,8 +38,8 @@ pseudovars = {
     'call.sender': 'TXSENDER',
     'call.value': 'CALLVALUE',
     'call.gasprice': 'GASPRICE',
+    'call.origin': 'ORIGIN',
     'balance': 'BALANCE',
-    'origin': 'ORIGIN',
     'gas': 'GAS',
     'block.prevhash': 'BLK_PREVHASH',
     'block.coinbase': 'BLK_COINBASE',
@@ -79,7 +83,7 @@ def compile_left_expr(expr,varhash):
         if get_left_expr_type(expr[1]) == 'storage':
             return compile_left_expr(expr[1],varhash) + ['SLOAD'] + compile_expr(expr[2],varhash)
         else:
-            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['ADD']
+            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','ADD']
     else:
         raise Exception("invalid op: "+expr[0])
 
@@ -92,8 +96,10 @@ def compile_expr(expr,varhash):
             return ['PUSH',varhash[expr],'MLOAD']
         elif expr in pseudovars:
             return [pseudovars[expr]]
+        elif expr == 'tx.data':
+            return ['PUSH','_TXDATALOC','MLOAD']
         else:
-            varhash[expr] = len(varhash)
+            varhash[expr] = len(varhash) * 32
             return ['PUSH',varhash[expr],'MLOAD']
     elif expr[0] in optable:
         if len(expr) != 3:
@@ -106,28 +112,24 @@ def compile_expr(expr,varhash):
             raise Exception("Wrong number of arguments: "+str(expr)) 
         f = sum([compile_expr(e,varhash) for e in expr[2:]],[])
         return f + [funtable[expr[1]][0]]
-    elif expr[0] == 'access':
-        if expr[1][0] == 'block.contract_storage':
-            return compile_expr(expr[2],varhash) + compile_expr(expr[1][1],varhash) + ['EXTRO']
-        elif expr[1] in pseudoarrays:
-            return compile_expr(expr[2],varhash) + pseudoarrays[expr[1]]
-        else:
-            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['ADD','MLOAD']
+    elif expr[0] == 'fun' and expr[1] == 'bytes':
+        return compile_expr(expr[2],varhash) + ['MSIZE','SWAP','MSIZE','ADD','PUSH',1,'SUB','PUSH',0,'MSTORE8']
     elif expr[0] == 'fun' and expr[1] == 'array':
-        return [ 'PUSH', 0, 'PUSH', 1, 'SUB', 'MLOAD', 'PUSH',
-                         2, 'PUSH', 160, 'EXP', 'ADD', 'DUP',
-                         'PUSH', 0, 'PUSH', 1, 'SUB', 'MSTORE' ]
+        return compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','MSIZE','SWAP','MSIZE','ADD','PUSH',1,'SUB','PUSH',0,'MSTORE8']
+    elif expr[0] == 'access':
+        if expr[1] in pseudoarrays:
+            return compile_expr(expr[2],varhash) + [pseudoarrays[expr[1]]]
+        elif len(expr) == 3:
+            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','ADD','MLOAD']
+        elif len(expr) == 4 and expr[3] == ':':
+            return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','ADD']
+        else:
+            raise Exception("Weird parameters for array access")
     elif expr[0] == '!':
         f = compile_expr(expr[1],varhash)
         return f + ['NOT']
     elif expr[0] in pseudoarrays:
         return compile_expr(expr[1],varhash) + pseudoarrays[expr[0]]
-    elif expr[0] in ['or', '||']:
-        return compile_expr(['!', [ '*', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
-    elif expr[0] in ['and', '&&']: 
-        return compile_expr(['!', [ '+', ['!', expr[1] ], ['!', expr[2] ] ] ],varhash)
-    elif expr == 'tx.datan':
-        return ['DATAN']
     else:
         raise Exception("invalid op: "+expr[0])
 
@@ -158,27 +160,40 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         for s in stmt[1:]:
             o.extend(compile_stmt(s,varhash,lc))
         return o
-    elif stmt[0] == 'fun' and stmt[1] == 'mktx':
-        to = compile_expr(stmt[2],varhash)
-        value = compile_expr(stmt[3],varhash)
-        datan = compile_expr(stmt[4],varhash)
-        datastart = compile_expr(stmt[5],varhash)
-        return datastart + datan + value + to + [ 'MKTX' ]
     elif stmt == 'stop':
         return [ 'STOP' ]
-    elif stmt[0] == 'fun' and stmt[1] == 'suicide':
-        return compile_expr(stmt[2]) + [ 'SUICIDE' ]
+    elif stmt[0] == 'fun' and stmt[1] in funtable:
+        f = sum([compile_expr(e,varhash) for e in stmt[2:]],[])
+        if len(stmt) != funtable[stmt[1]][1] + 2:
+            raise Exception("Wrong number of arguments: "+str(stmt)) 
+        o = f + [funtable[stmt[1]][0]]
+        if stmt[1][2] == 0:
+            o += ['POP']
+        return o
+
+def get_vars(thing,h={}):
+    if thing[0] in ['seq','if','while','set','access']:
+        for t in thing[1:]: h = get_vars(t,h)
+    elif thing[0] == 'fun':
+        for t in thing[2:]: h = get_vars(t,h)
+    elif isinstance(thing,(str,unicode)) and thing not in pseudovars and thing not in pseudoarrays:
+        h[thing] = true
+    return h
         
 # Dereference labels
-def assemble(c):
+def assemble(c,varcount=99):
     iq = [x for x in c]
     mq = []
     pos = 0
     labelmap = {}
+    if '_TXDATALOC' in mq:   
+        mq = ['PUSH',varcount*32,'DUP','CALLDATA'] + mq
     while len(iq):
         front = iq.pop(0)
         if isinstance(front,str) and front[:6] == 'LABEL_':
             labelmap[front[6:]] = pos
+        elif front == '_TXDATALOC':
+            mq.apend(varcount*32)
         else:
             mq.append(front)
             pos += 2 if isinstance(front,str) and front[:4] == 'REF_' else 1
@@ -193,7 +208,9 @@ def assemble(c):
 def compile(source):
     if isinstance(source,('str','unicode')): source = parse(source)
     #print p
-    return assemble(compile_stmt(source))
+    varhash = {}
+    c = compile_stmt(source,varhash)
+    return assemble(c,len(varhash))
 
 if len(sys.argv) >= 2:
     if os.path.exists(sys.argv[1]):

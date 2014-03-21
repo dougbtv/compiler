@@ -144,6 +144,7 @@ precedence = {
     '&&': 6,
     'or': 7,
     '||': 7,
+    '!': 0
 }
 
 def toktype(token):
@@ -151,6 +152,7 @@ def toktype(token):
     elif token in ['(','[']: return 'lparen'
     elif token in [')',']']: return 'rparen'
     elif token == ',': return 'comma'
+    elif token == ':': return 'colon'
     elif token in ['!']: return 'monop' 
     elif not isinstance(token,str): return 'compound'
     elif token in precedence: return 'op'
@@ -216,6 +218,9 @@ def shunting_yard(tokens):
             stack.append(tok)
         elif typ == 'comma':
             while len(stack) and stack[-1] != 'lparen': popstack(stack,oq)
+        elif typ == 'colon':
+            while len(stack) and stack[-1] != 'lparen': popstack(stack,oq)
+            oq.append(tok)
         #print 'iq',iq,'stack',stack,'oq',oq
     while len(stack):
         popstack(stack,oq)
@@ -234,7 +239,7 @@ def parse_line(ln):
         return [ 'else if', shunting_yard(tokens[1:]) ]
     elif len(tokens) == 1 and tokens[0] == 'else':
         return [ 'else' ]
-    elif tokens[0] in ['mktx','suicide','stop']:
+    elif tokens[0] in ['mkcall','create','suicide','stop','return']:
         return shunting_yard(tokens)
     else:
         eqplace = tokens.index('=')
