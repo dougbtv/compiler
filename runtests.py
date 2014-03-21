@@ -10,10 +10,10 @@ while 1:
     print '================='
     text = '\n'.join(o).replace('\n\n','\n')
     print text
-    ast = cllcompiler.parse_lines(o)
+    ast = cllcompiler.parse(text)
     print "AST:",ast
     print ""
-    code = cllcompiler.assemble(cllcompiler.compile_stmt(ast))
+    code = cllcompiler.compile(ast)
     print "Output:",' '.join([str(x) for x in code])
     if i >= len(t):
         break

@@ -34,3 +34,6 @@ else:
     a = bytes(tx.data[2])
     mkcall(contract.storage[tx.data[1]],tx.value,0,tx.data[3:],tx.datasize-96,a,tx.data[2])
     return(a,tx.data[2])
+================
+a = bytes(45)
+b = array(3)

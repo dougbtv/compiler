@@ -26,7 +26,6 @@ optable = {
 funtable = {
     'sha3': ['SHA3', 3, 1],
     'ecrecover': ['ECRECOVER', 4, 1],
-    'byte': ['BYTE', 2, 1],
     'mkcall': ['CALL', 7, 1],
     'create': ['CREATE', 5, 1],
     'return': ['RETURN', 2, 0],
@@ -55,6 +54,21 @@ pseudoarrays = {
     'block.address_balance': 'BALANCE',
 }
 
+def frombytes(b):
+    return 0 if len(b) == 0 else ord(b[-1]) + 256 * frombytes(b[:-1])
+
+def is_numberlike(b):
+    if isinstance(b,(str,unicode)):
+        if re.match('^[0-9\-]*$',b):
+            return True
+        if b[0] in ["'",'"'] and b[-1] in ["'",'"'] and b[0] == b[-1]:
+            return True
+    return False
+
+def numberize(b):
+    if b[0] in ["'",'"']: return frombytes(b[1:-1])
+    else: return int(b)
+
 # Left-expressions can either be:
 # * variables
 # * A[B] where A is a left-expr and B is a right-expr
@@ -70,18 +84,20 @@ def get_left_expr_type(expr):
 def compile_left_expr(expr,varhash):
     typ = get_left_expr_type(expr)
     if typ == 'variable':
-        if re.match('^[0-9\-]*$',expr):
+        if is_numberlike(expr):
             raise Exception("Can't set the value of a number! "+expr)
         elif expr in varhash:
             return ['PUSH',varhash[expr]]
         else:
-            varhash[expr] = len(varhash)
+            varhash[expr] = len(varhash) * 32
             return ['PUSH',varhash[expr]]
     elif typ == 'storage':
         return compile_expr(expr[2],varhash)
     elif typ == 'access':
         if get_left_expr_type(expr[1]) == 'storage':
             return compile_left_expr(expr[1],varhash) + ['SLOAD'] + compile_expr(expr[2],varhash)
+        elif is_numberlike(expr[2]):
+            return compile_left_expr(expr[1],varhash) + [numberize(expr[2])*32, 'ADD']
         else:
             return compile_left_expr(expr[1],varhash) + compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','ADD']
     else:
@@ -90,8 +106,8 @@ def compile_left_expr(expr,varhash):
 # Right-hand-side expressions (ie. the normal kind)
 def compile_expr(expr,varhash):
     if isinstance(expr,str):
-        if re.match('^[0-9\-]*$',expr):
-            return ['PUSH',int(expr)]
+        if is_numberlike(expr):
+            return ['PUSH',numberize(expr)]
         elif expr in varhash:
             return ['PUSH',varhash[expr],'MLOAD']
         elif expr in pseudovars:
@@ -115,7 +131,10 @@ def compile_expr(expr,varhash):
     elif expr[0] == 'fun' and expr[1] == 'bytes':
         return compile_expr(expr[2],varhash) + ['MSIZE','SWAP','MSIZE','ADD','PUSH',1,'SUB','PUSH',0,'MSTORE8']
     elif expr[0] == 'fun' and expr[1] == 'array':
-        return compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','MSIZE','SWAP','MSIZE','ADD','PUSH',1,'SUB','PUSH',0,'MSTORE8']
+        if is_numberlike(expr[2]):
+            return [numberize(expr[2])*32,'MSIZE','SWAP','MSIZE','ADD','PUSH',1,'SUB','PUSH',0,'MSTORE8']
+        else: 
+            return compile_expr(expr[2],varhash) + ['PUSH',32,'MUL','MSIZE','SWAP','MSIZE','ADD','PUSH',1,'SUB','PUSH',0,'MSTORE8']
     elif expr[0] == 'access':
         if expr[1] in pseudoarrays:
             return compile_expr(expr[2],varhash) + [pseudoarrays[expr[1]]]
