@@ -206,7 +206,7 @@ def assemble(c,varcount=99):
     return oq
 
 def compile(source):
-    if isinstance(source,('str','unicode')): source = parse(source)
+    if isinstance(source,(str,unicode)): source = parse(source)
     #print p
     varhash = {}
     c = compile_stmt(source,varhash)
