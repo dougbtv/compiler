@@ -137,8 +137,20 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         h = compile_stmt(stmt[3],varhash,lc) if len(stmt) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
-        if h: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ ref, 'JMP' ] + h + [ label ]
-        else: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
+        if h:
+            print "!trace a" 
+            print label, ref
+            print "statement",stmt
+            ifpart = f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ] + h
+            print ifpart
+            return ifpart
+        else: 
+            print "!trace b" 
+            print label, ref
+            print stmt
+            ifpart = f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
+            print ifpart
+            return ifpart
     elif stmt[0] == 'while':
         f = compile_expr(stmt[1],varhash)
         g = compile_stmt(stmt[2],varhash,lc)
@@ -177,6 +189,9 @@ def compile_stmt(stmt,varhash={},lc=[0]):
         
 # Dereference labels
 def assemble(c):
+    print "doug quick ---------------------------------"
+    print c
+    print "end quick ----------------------------------"
     iq = [x for x in c]
     mq = []
     pos = 0
@@ -184,6 +199,7 @@ def assemble(c):
     while len(iq):
         front = iq.pop(0)
         if isinstance(front,str) and front[:6] == 'LABEL_':
+            print "label pos: ", pos
             labelmap[front[6:]] = pos
         else:
             mq.append(front)
