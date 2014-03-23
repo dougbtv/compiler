@@ -130,15 +130,27 @@ def compile_expr(expr,varhash):
         raise Exception("invalid op: "+expr[0])
 
 # Statements (ie. if, while, a = b, a,b,c = d,e,f, [ s1, s2, s3 ], stop, suicide)
-def compile_stmt(stmt,varhash={},lc=[0]):
-    if stmt[0] == 'if':
-        f = compile_expr(stmt[1],varhash)
-        g = compile_stmt(stmt[2],varhash,lc)
-        h = compile_stmt(stmt[3],varhash,lc) if len(stmt) > 3 else None
+# lc = labels & references index
+# elsemarker = marker for where to jump inside an if/else, to after an else statement
+def compile_stmt(stmt,varhash={},lc=[0],elsemarker=[0]):
+    if stmt[0] in ['if', 'elif', 'else']:
+        stmtindex = 2                           # Typically we use the second index, which is the condition for the if 
+        if stmt[0] == "else":                   # However, with else, our condition isn't explicit.
+            stmtindex = 1                       # So, let's use previous index.
+            elsemarker[0] = lc[0]               # And we have to remember where the end of this else is, like a label.
+        else:
+            f = compile_expr(stmt[1],varhash)   # Additionally we don't compile expressions for conditionals.
+        g = compile_stmt(stmt[stmtindex],varhash,lc,elsemarker)
+        h = compile_stmt(stmt[3],varhash,lc,elsemarker) if len(stmt) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
-        if h: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ] + h
-        else: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
+        if stmt[0] == "else":
+            return g + [ label ]
+        else: 
+            if h: 
+                return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ 'REF_'+str(elsemarker[0]), 'JMP' ] + [ label ] + h
+            else: 
+                return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
     elif stmt[0] == 'while':
         f = compile_expr(stmt[1],varhash)
         g = compile_stmt(stmt[2],varhash,lc)
