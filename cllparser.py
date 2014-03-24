@@ -49,12 +49,12 @@ def parse_lines(lns):
             if len(o) == 0: raise Exception("Cannot start with else if! (%d)" % i)
             u = o[-1]
             while len(u) == 4: u = u[-1]
-            u.append(['if'] + out[1:])
+            u.append(['elif'] + out[1:])
         elif out[0] == 'else':
             if len(o) == 0: raise Exception("Cannot start with else! (%d)" % i)
             u = o[-1]
             while len(u) == 4: u = u[-1]
-            u.append(out[1])
+            u.append(['else'] + [out[1]])
         else:
             # Normal case: just add the parsed line to the output
             o.append(out)
