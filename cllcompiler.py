@@ -160,26 +160,35 @@ def compile_expr(expr,varhash):
         raise Exception("invalid op: "+expr[0])
 
 # Statements (ie. if, while, a = b, a,b,c = d,e,f, [ s1, s2, s3 ], stop, suicide)
-def compile_stmt(stmt,varhash={},lc=[0],elsemarker=[0]):
+def compile_stmt(stmt,varhash={},lc=[0],endifmarker=[0],endifknown=[0]):
     if stmt[0] in ['if', 'elif', 'else']:
         # Typically we use the second index, which is the condition for the if
         stmtindex = 2
         # However, with else, our condition isn't explicit.
         if stmt[0] == "else":
-            # So, let's use previous index.
+            # So we use a previous index in this statement
             stmtindex = 1
-            # And we have to remember where the end of this else is, like a label.
-            elsemarker[0] = lc[0]
+            # Set that we know the endif exists, at this label.
+            endifmarker[0] = lc[0]
+            endifknown[0] = 1
         else:
             # Additionally we compile expressions only for conditionals.
             f = compile_expr(stmt[1],varhash)
-        g = compile_stmt(stmt[stmtindex],varhash,lc,elsemarker)
-        h = compile_stmt(stmt[3],varhash,lc,elsemarker) if len(stmt) > 3 else None
+        g = compile_stmt(stmt[stmtindex],varhash,lc,endifmarker,endifknown)
+        h = compile_stmt(stmt[3],varhash,lc,endifmarker,endifknown) if len(stmt) > 3 else None
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
+        # We hold the lc's place, as if the end if location is unknown this "could be end if"
+        couldbeendif = lc[0]
         lc[0] += 1
         if stmt[0] == "else": return g + [ label ]
         else:
-            if h: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ 'REF_'+str(elsemarker[0]), 'JUMP' ] + [ label ] + h
+            if not endifknown[0]:
+                # If our endif is unknown, we mark it here
+                endifmarker[0] = couldbeendif
+                endifknown[0] = 1
+            # An if denotes the beginning of a if/elif/else block, reset our known endif
+            if stmt[0] == "if": endifknown[0] = 0
+            if h: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ 'REF_'+str(endifmarker[0]), 'JUMP' ] + [ label ] + h
             else: return f + [ 'NOT', ref, 'JUMPI' ] + g + [ label ]
     elif stmt[0] == 'while':
         f = compile_expr(stmt[1],varhash)
