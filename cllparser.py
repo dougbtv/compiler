@@ -34,7 +34,7 @@ def parse_lines(lns):
         # Calls parse_line to parse the individual line
         out = parse_line(main)
         # Include the child block into the parsed expression
-        if out[0] in ['if', 'else', 'while', 'else if']:
+        if out[0] in ['if', 'else', 'while', 'else if','def']:
             if len(child_block) == 0:
                 raise Exception("If/else/while statement must have sub-clause! (%d)" % i)
             else:
@@ -185,6 +185,7 @@ def shunting_yard(tokens):
             if tok == ']':
                 oq.append(['access'] + args)
             elif tok == ')' and len(args) and args[0] != 'id':
+                print "!trace c: ",args
                 oq.append(['fun'] + args)
             else:
                 oq.append(args[1])
@@ -227,14 +228,21 @@ def shunting_yard(tokens):
 
 def parse_line(ln):
     tokens = tokenize(ln.strip())
-    if tokens[0] == 'if' or tokens[0] == 'while':
-        return [ tokens[0], shunting_yard(tokens[1:]) ]
+    print "!trace: ", tokens
+    if tokens[0] == 'if' or tokens[0] == 'while' or tokens[0] == 'def':
+        thereturner = [ tokens[0], shunting_yard(tokens[1:]) ]
+        print thereturner
+        return thereturner
     elif len(tokens) >= 2 and tokens[0] == 'else' and tokens[1] == 'if':
         return [ 'else if', shunting_yard(tokens[2:]) ]
     elif len(tokens) >= 1 and tokens[0] == 'elif':
         return [ 'else if', shunting_yard(tokens[1:]) ]
     elif len(tokens) == 1 and tokens[0] == 'else':
         return [ 'else' ]
+    elif tokens[0] == "return":
+        thereturner = [ 'return', shunting_yard(tokens[1:]) ]
+        print "!trace b: ", thereturner
+        return thereturner
     elif tokens[0] in ['mktx','suicide','stop']:
         return shunting_yard(tokens)
     else:
