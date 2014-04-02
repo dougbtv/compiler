@@ -185,7 +185,6 @@ def shunting_yard(tokens):
             if tok == ']':
                 oq.append(['access'] + args)
             elif tok == ')' and len(args) and args[0] != 'id':
-                print "!trace c: ",args
                 oq.append(['fun'] + args)
             else:
                 oq.append(args[1])
@@ -228,11 +227,8 @@ def shunting_yard(tokens):
 
 def parse_line(ln):
     tokens = tokenize(ln.strip())
-    print "!trace: ", tokens
     if tokens[0] == 'if' or tokens[0] == 'while' or tokens[0] == 'def':
-        thereturner = [ tokens[0], shunting_yard(tokens[1:]) ]
-        print thereturner
-        return thereturner
+        return [ tokens[0], shunting_yard(tokens[1:]) ]
     elif len(tokens) >= 2 and tokens[0] == 'else' and tokens[1] == 'if':
         return [ 'else if', shunting_yard(tokens[2:]) ]
     elif len(tokens) >= 1 and tokens[0] == 'elif':
@@ -240,9 +236,7 @@ def parse_line(ln):
     elif len(tokens) == 1 and tokens[0] == 'else':
         return [ 'else' ]
     elif tokens[0] == "return":
-        thereturner = [ 'return', shunting_yard(tokens[1:]) ]
-        print "!trace b: ", thereturner
-        return thereturner
+        return [ 'return', shunting_yard(tokens[1:]) ]
     elif tokens[0] in ['mktx','suicide','stop']:
         return shunting_yard(tokens)
     else:

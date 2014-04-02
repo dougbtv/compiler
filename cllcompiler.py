@@ -116,46 +116,24 @@ def compile_expr(expr,varhash,functionhash={},lc=[0]):
                          2, 'PUSH', 160, 'EXP', 'ADD', 'DUP',
                          'PUSH', 0, 'PUSH', 1, 'SUB', 'MSTORE' ]
     elif expr[0] == 'fun':
-        #!bang
+        # That's a custom function.
         if expr[1] not in functionhash:
             raise Exception("function not defined: "+expr[1])
-        # That's a custom function.
-        print "\n\n\n!trace d -------------- custom function?"
-        # So what we want to do push the return value.
-        print "functionhash? ", functionhash
-        print "expr: ", expr
-        # Go -> Return -> Set
         # Setup our return point.
-        print "show me the LC! ---------> ", lc
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
-        # increment it.
         lc[0] += 1
         # Save that in the variable reserved for this function.
-        funcreturnstmt = ['set',expr[1] + "_returnpoint",ref]
-        print "ret statement: ", funcreturnstmt
-        functionreturn = compile_stmt(funcreturnstmt,varhash,functionhash,lc)
-        print "our function return: ", functionreturn
+        stmt_setfuncreturnvar = ['set',expr[1] + "_returnpoint",ref]
+        stmt_functionreturn = compile_stmt(stmt_setfuncreturnvar,varhash,functionhash,lc)
         # Set each variable which represents a parameter for the function.
         params = []
         paramidx = -1
         for ex in expr[2:]:
             paramidx += 1
             setparamstmt = ['set',functionhash[expr[1]]['params'][paramidx],ex]
-            print "new setparamstmt: ", setparamstmt
             for part in compile_stmt(setparamstmt,varhash,functionhash,lc): params.append(part)
-
-        # thereturn = expr[2:]
-        # Ok, you should be able to put that together now.
-        # Steps again:
-        # - Set function return variable
-        # - Set parameters
-        # - Go to the function
-        # - Set the label
-        thereturn = functionreturn + params + [ functionhash[expr[1]]['funcref'], 'JMP' ] + [ label ] + [ 'SWAP' ]
-        print "THERETURN: ", thereturn
-        print "params: ", params
-        print varhash
-        print "\n\n\n\n"
+        # Steps: Set function return variable, Set parameters, Go to the function, Set the label
+        thereturn = stmt_functionreturn + params + [ functionhash[expr[1]]['funcref'], 'JMP' ] + [ label ] + [ 'SWAP' ]
         return thereturn
 
 
@@ -207,10 +185,6 @@ def compile_stmt(stmt,varhash={},functionhash={},lc=[0],endifmarker=[0],endifkno
             if h: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ 'REF_'+str(endifmarker[0]), 'JMP' ] + [ label ] + h
             else: return f + [ 'NOT', ref, 'SWAP', 'JMPI' ] + g + [ label ]
     elif stmt[0] == "def":
-        print "!trace >>>>>>>>>>>>>------------->>>>>>>>>>>>>>>>>>>>"
-        print "statement: ", stmt
-        print "varhash: ", varhash
-        print "label collection: ", lc
         # create the reference and label.
         label, ref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         # increment it.
@@ -218,39 +192,21 @@ def compile_stmt(stmt,varhash={},functionhash={},lc=[0],endifmarker=[0],endifkno
         # hey, we're going to need a label INSIDE, so we can access this.
         insidelabel, insideref = 'LABEL_'+str(lc[0]), 'REF_'+str(lc[0])
         lc[0] += 1
-        # Compile our sequence
-        print "our sequence: ", stmt[2]
+        # Compile our sequence inside the function.
         f = compile_stmt(stmt[2],varhash,functionhash,lc)
-        print "!tracer round **********************************"
-        print "varhash: ", varhash
-        # we'll need a few vars? 
-        # namely: the functionhash
-        # let's init that.
+        # put together the metadata about the function in the functionhash.
         funcname = stmt[1][1]
         functionhash[funcname] = {}
         functionhash[funcname]['params'] = []
         functionhash[funcname]['funcref'] = insideref
         # - one of which is: where do we go at the end, we return to whence we came.
-        # we need this every time, let's make it.
         varhash[funcname + '_returnpoint'] = len(varhash)
-
-        # - another of which is: the return value?
-        #                             ^ maybe we just push that (we will)
-        # - what about foreach parameter?
-        # yep, gonna need that, let's add those.
-        # hold on, we might not.
-        # these should be used, and assigned.
-        ###------------
+        # - and we add each parameter to the varhash (if unknown, typically they're known as they're used in the function block)
         for param in stmt[1][2:]:
-            print "param! ", param
             if param not in varhash:
                 varhash[param] = len(varhash)
             functionhash[funcname]['params'].append(param)
-        #    # return ['PUSH',varhash[expr],'MLOAD']
-        print "modified functionhash: ", functionhash
-        print "modified varhash: ", varhash
         thereturn = [ ref, 'JMP', insidelabel] + f + [ functionhash[funcname]['funcref'], 'JMP'] + [ label ]
-        print thereturn
         return thereturn
 
     elif stmt[0] == 'while':
@@ -293,7 +249,6 @@ def compile_stmt(stmt,varhash={},functionhash={},lc=[0],endifmarker=[0],endifkno
         
 # Dereference labels
 def assemble(c):
-    print "THE BIG OLE: ", c, "\n\n\n"
     iq = [x for x in c]
     mq = []
     pos = 0
