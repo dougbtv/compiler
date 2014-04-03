@@ -133,10 +133,7 @@ def compile_expr(expr,varhash,functionhash={},lc=[0]):
             setparamstmt = ['set',functionhash[expr[1]]['params'][paramidx],ex]
             for part in compile_stmt(setparamstmt,varhash,functionhash,lc): params.append(part)
         # Steps: Set function return variable, Set parameters, Go to the function, Set the label
-        thereturn = stmt_functionreturn + params + [ functionhash[expr[1]]['funcref'], 'JMP' ] + [ label ] + [ 'SWAP' ]
-        return thereturn
-
-
+        return stmt_functionreturn + params + [ functionhash[expr[1]]['funcref'], 'JMP' ] + [ label ]
     elif expr[0] == '!':
         f = compile_expr(expr[1],varhash)
         return f + ['NOT']
@@ -206,9 +203,7 @@ def compile_stmt(stmt,varhash={},functionhash={},lc=[0],endifmarker=[0],endifkno
             if param not in varhash:
                 varhash[param] = len(varhash)
             functionhash[funcname]['params'].append(param)
-        thereturn = [ ref, 'JMP', insidelabel] + f + [ functionhash[funcname]['funcref'], 'JMP'] + [ label ]
-        return thereturn
-
+        return [ ref, 'JMP', insidelabel] + f + [ 'PUSH', varhash[funcname + '_returnpoint'], 'MLOAD', 'JMP'] + [ label ]
     elif stmt[0] == 'while':
         f = compile_expr(stmt[1],varhash,functionhash,lc)
         g = compile_stmt(stmt[2],varhash,functionhash,lc)
@@ -240,6 +235,9 @@ def compile_stmt(stmt,varhash={},functionhash={},lc=[0],endifmarker=[0],endifkno
         datan = compile_expr(stmt[4],varhash,functionhash,lc)
         datastart = compile_expr(stmt[5],varhash,functionhash,lc)
         return datastart + datan + value + to + [ 'MKTX' ]
+    elif stmt[0] == 'fun' and stmt[1] in functionhash:
+        # It's a bare function. Which looks like a statement, compile it as an expression.
+        return compile_expr(stmt,varhash,functionhash,lc)
     elif stmt == 'stop':
         return [ 'STOP' ]
     elif stmt[0] == 'fun' and stmt[1] == 'suicide':

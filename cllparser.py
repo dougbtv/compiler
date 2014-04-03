@@ -239,6 +239,9 @@ def parse_line(ln):
         return [ 'return', shunting_yard(tokens[1:]) ]
     elif tokens[0] in ['mktx','suicide','stop']:
         return shunting_yard(tokens)
+    elif re.match('^\s*[^\s]+\(.*\)$',ln):
+        # Thats a bare function call.
+        return shunting_yard(tokens)
     else:
         eqplace = tokens.index('=')
         pre = 0
